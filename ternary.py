@@ -117,8 +117,8 @@ else:
         points_total.append((nue, nuebar, nux))
         total = nue + nuebar + nux
         concentrations = (nue / total * 100, nuebar / total * 100, nux / total * 100)
-        # if 0 not in concentrations: 
-        #     points.append(concentrations)
+        if 0 not in concentrations: 
+            points.append(concentrations)
 
     # dealing with graphics
     fps = len(points) / time_length
@@ -159,6 +159,7 @@ else:
         tax.gridlines(color="black", multiple=20)
         tax.gridlines(color="blue", multiple=20, linewidth=0.5)
         tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+        print(points)
         tax.plot_colored_trajectory(points, cmap="Spectral",linewidth=1, label="flux", alpha=.5)
         tax.scatter(points, s=10, c=rgb, marker=".", linewidth=3, label="flux", alpha=.5)
         tax.show()
