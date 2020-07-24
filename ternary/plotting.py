@@ -89,7 +89,7 @@ def plot_colored_trajectory(points, cmap=None, ax=None, permutation=None,
         The name of the Matplotlib colormap to use.
     kwargs:
         Any kwargs to pass through to matplotlib.
-    """
+    """ 
     if not ax:
         fig, ax = pyplot.subplots()
     cmap = get_cmap(cmap)
