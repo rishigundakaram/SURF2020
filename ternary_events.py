@@ -1,88 +1,75 @@
 import matplotlib
-matplotlib.use("Agg")
 import sys
-import matplotlib.pyplot as plt
+if 'standard' not in sys.argv[1]:
+    matplotlib.use("Agg")
 from ternary import plotting
 from ternary import ternary_axes_subplot as ternary
 import re
 import pandas as pd
 import math
 from celluloid import Camera
-import matplotlib.animation as animation
 import os
 from pprint import pprint
 from natsort import natsorted, ns
 from pprint import pprint
 from ternary_helpers import *
+import numpy as np
 
-### parameters 
-interactions = {
-    "nc":["O16"], 
-    "cc":["O16", "e"]
-}
 
-### constants
+### parameters
 flavors = ['nue', 'nuebar', 'numu', 'numubar', 'nutau', 'nutaubar']
-flux_dir = "../fluxes/no osc/ih/"
-event_dir = "../out/garching_in"
+flux_dir = "../fluxes/no_osc/scint/"
+event_dir = "../out/no_osc/"
 key_dir = "../fluxes/garching/garching_pinched_info_key.dat"
 time_length = 10
 
+### specifically for multiple channels 
+include_channels = [["water", "wc100kt30prct"], ["argon", "ar40kt"], ["scint", "scint20kt"]]
 
-def points_over_time(title, detector, smear=True): 
-    print(smear)
-    fluxes = os.listdir(flux_dir)
-    fluxes = natsorted(fluxes)
-    points_events = []
-    for flux in fluxes: 
-        flux = flux.replace(".dat", "")
-        points_events.append(get_events_from_flux(flux, detector, smeared=smear))
-    points_flux = get_raw_points_for_flux(flux_dir)
+def multiple_channels_over_time(smear=True, title=""):
+    points = []
+    for (channel, config) in include_channels: 
+        points_events = np.array(total_events_from_flux(channel, config, flux_dir, f"{event_dir}{channel}/", smeared=smear)) 
+        if len(points) == 0: 
+            points = np.zeros((len(points_events), 3))
+        for (i, inter) in enumerate(interactions[channel]): 
+            if 'ibd' in inter: 
+                points[:,0] += points_events[:,i]
+            elif 'nue' in inter or '_e' in inter: 
+                points[:,1] += points_events[:,i]
+            elif 'nc' in inter: 
+                points[:,2] += points_events[:,i]
+        (time, time_idx) = time_bins(key_dir, .1, 50)
+    points = points.tolist()
+    (raw_points_events, ternary_points_events) = consolidate_points(points, time_idx)
+    pprint(raw_points_events)
+    fps = len(ternary_points_events) / time_length
+    labels = ('ibd', 'nc', 'nue + ES')
+    smeared = "non-smeared"
+    if smear: 
+        smeared = "smeared"
+    sub_title = ' '.join([i[0] for i in include_channels])
+    sub = f"{title} {sub_title} events {smeared}"
+    # plotting time
+    shared_plotting_script(sub, labels, ternary_points_events, raw_points_events, time, time_idx, fps)
+
+def points_over_time(detector, config, smear=True, title=""):
+    points_events = total_events_from_flux(detector, config, flux_dir, event_dir, smeared=smear) 
+    pprint(points_events)
     (time, time_idx) = time_bins(key_dir, .1, 50)
     (raw_points_events, ternary_points_events) = consolidate_points(points_events, time_idx)
-    (raw_point_flux, ternary_points_flux) = consolidate_points(points_flux, time_idx)
     fps = len(ternary_points_events) / time_length
     writer = animation.PillowWriter(fps=fps)
+    labels = get_labels(detector)
+    smeared = "non-smeared"
+    if smear: 
+        smeared = "smeared"
+    sub = f" {title} {detector} {config} events {smeared}"
 
     # plotting time
-    scale = 100
-    figure, tax = ternary.figure(scale=scale) 
-    cam = Camera(figure)
-    fontsize = 12
-    tax.set_title(title + "\n" , fontsize=fontsize)
-    tax.right_axis_label("$\%\\nu_{x} (\\nu_{\\mu} + \\overline{\\nu}_{\\mu} + \
-    \\nu_{\\tau} + \\overline{\\nu}_{\\tau})$ ", fontsize=fontsize, offset=0.14)
-    tax.bottom_axis_label("$\%\\overline{\\nu}_e$", fontsize=fontsize, offset=0.14)
-    tax.left_axis_label("$\%\\nu_e$" , fontsize=fontsize, offset=0.14)
-    tax.clear_matplotlib_ticks()
-    tax.get_axes().axis('off')
+    shared_plotting_script(sub, labels, ternary_points_events, raw_points_events, time, time_idx, fps)
 
-    rgb_events = [(0, 0, 1)]
-    rgb_flux = [(1, 0, 0)]
-    if sys.argv[1] == 'animation':
-        for (i, point) in enumerate(ternary_points_events):
-            tax.boundary(linewidth=1.5)
-            tax.gridlines(color="black", multiple=20)
-            tax.gridlines(color="blue", multiple=20, linewidth=0.5)
-            tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
-            tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-            tax.scatter(ternary_points_flux[0:i+1], c=rgb_flux[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-            tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
-            cam.snap()
-            print(f"frame number: {i}")
-        ani = cam.animate()
-        ani.save(f"./out/animation/{title}.gif", writer=writer)
-    elif sys.argv[1] == 'scatter':
-        tax.boundary(linewidth=1.5)
-        tax.gridlines(color="black", multiple=20)
-        tax.gridlines(color="blue", multiple=20, linewidth=0.5)
-        tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
-        tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-        tax.scatter(ternary_points_flux[0:i+1], c=rgb_flux[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-        plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
-        tax.show()
+multiple_channels_over_time(smear=True, title="No Osc")
+# points_over_time("argon", "ar40kt", smear=True, title="No Osc")
 
-
-points_over_time("events vs flux smeared Oscillation ~.588 NH", "wc100kt30prct", smear=True)
-# points_over_time("events_vs_flux_smeared", "wc100kt30prct", smear=True)
 

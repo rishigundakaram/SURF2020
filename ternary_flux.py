@@ -74,7 +74,6 @@ else:
         tax.legend()
         title = sys.argv[1].replace(" ","_")
         plt.savefig(f"./out/plots/{sys.argv[2]}_{sys.argv[3]}_{title}.png", writer=writer)
-        tax.show()
     elif sys.argv[2] == 'animation': 
         print(len(ternary_points))
         print(len(time_idx))

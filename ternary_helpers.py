@@ -4,15 +4,79 @@ from ternary import plotting
 from ternary import ternary_axes_subplot as ternary
 from celluloid import Camera
 from natsort import natsorted
+import matplotlib.animation as animation
 import os
+import string
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap as lsc
 
 
 flavors = ['nue', 'nuebar', 'numu', 'numubar', 'nutau', 'nutaubar']
 interactions = {
-    "nc":["O16"], 
-    "cc":["O16", "e"]
+    "argon" : ["nue_Ar40", "_e", "nc"], 
+    "water" : ["ibd", ["_e", "nue_O16"], "nc"], 
+    "scint" : ["ibd", ["_e_", "nue_C12"], "nc"]
 }
-file_dir = "../out/garching_in/"
+cdict= {
+    'red': ((0.0, 0.0, 1.0), (1.0, 1.0, 0.0)),
+    'green': ((0.0,0.0,0.0), (1.0,0.0,0.0)),
+    'blue':((0.0,0.0,0.0), (1.0,0.0,0.0)),
+    'alpha': ((0.0,0.0,.75), (1.0, .75, 0.0))
+}
+cmap = lsc("red-constant",cdict)
+def total_events_from_flux(detector, config, flux_dir, out_dir, smeared=True): 
+    fluxes = os.listdir(flux_dir)
+    fluxes = natsorted(fluxes)
+    channels = load_detector(detector)
+    chan = []
+    for inter in interactions[detector]: 
+        if type(inter) == list: 
+            lst = []
+            for cur in inter: 
+                check = [i for i in channels if cur in i]
+                if inter != 'nc': 
+                    check = [i for i in check if 'nc' not in i]
+                lst.extend(check)
+            chan.append(lst)
+        else: 
+            check = [i for i in channels if inter in i]
+            if inter != 'nc': 
+                check = [i for i in check if 'nc' not in i]
+            chan.append(check)
+    total_events = []
+    for flux in fluxes: 
+        flux = flux.replace(".dat", "")
+        sub_total_events = [0 , 0, 0] 
+        for (i, c) in enumerate(chan): 
+            subtotal = 0
+            for cur in c: 
+                filename = f"{out_dir}{flux}_{cur}_{config}_events"
+                if smeared: 
+                    filename += "_smeared"
+                filename += ".dat"
+                with open(filename) as f: 
+                    for line in f: 
+                        data = line.split()
+                    subtotal += float(data[1])
+            sub_total_events[i] = subtotal
+        total_events.append(sub_total_events)
+    return total_events
+
+def get_labels(detector): 
+    out = interactions[detector]
+    labels = [0, 0, 0]
+    for (i, label) in enumerate(out): 
+        separator = ""
+        if type(label) == list: 
+            for l in label: 
+                l = l.replace("_", "")
+                separator += f"%{l}, "
+        else: 
+            separator = f"%{label}"
+        labels[i] = separator
+        separator = ""
+    return labels
+
 
 def time_bins(filename, log_scale, num_bins): 
     with open(filename) as f: 
@@ -47,7 +111,6 @@ def consolidate_points(points, time_idx):
     raw_points = []
     ternary_points = []
     for i in enumerate(time_idx): 
-        print(f"i:{i}")
         if i[0] == 0:
             start = 0
         else:
@@ -57,49 +120,24 @@ def consolidate_points(points, time_idx):
         nue = sum([j[0] for j in cur])
         nuebar = sum([j[1] for j in cur])
         nux = sum([j[2] for j in cur])
-        raw_points.append((nue, nuebar, nux))
         total = nue + nuebar + nux
         concentrations = (nue / total * 100, nuebar / total * 100, nux / total * 100)
         if 0 not in concentrations: 
             ternary_points.append(concentrations)
+            raw_points.append((nue, nuebar, nux))
         else: 
             idx_rem.append(i[1])
     for i in idx_rem: 
         time_idx.remove(i)
     return (raw_points, ternary_points)
 
-
-def get_events_from_flux(flux, detector, smeared=True):
-    events = [0 for i in range(6)]
-    for (i, flavor) in enumerate(flavors): 
-        for inter in interactions.keys(): 
-            events[i] += total_events_from_type(flux, "wc100kt30prct", flavor, inter, smeared=smeared)
-    point = (events[0], events[1], sum(events[2:]))
-    return point
-
-def total_events_from_type(flux, detector, neutrino, interaction, smeared=True): 
-    filename = file_dir + flux + "_"
-    if interaction == 'nc': 
-        sub = f"nc_{neutrino}_"
-    else: 
-        sub = f"{neutrino}_"
-    if smeared: 
-        smear = "events_smeared"
-    else: 
-        smear = "events"
-    filenames = [f"{filename}{sub}{i}_{detector}_{smear}.dat" for i in interactions[interaction]]
-    print(filenames)
-    total_events = 0
-    for filename in filenames: 
-        try: 
-            with open(filename) as f: 
-                for line in f: 
-                    data = line.split()
-                events = float(data[1])
-                total_events += events 
-        except:
-            print("improper configuration")
-    return total_events
+def load_detector(channel): 
+    conf = []
+    with open(f"../channels/channels_{channel}.dat") as f: 
+        for line in f: 
+            line = line.split(" ")
+            conf.append(line[0])
+    return conf
     
 def get_raw_points_for_flux(directory): 
     raw_points = []
@@ -121,3 +159,74 @@ def get_raw_points_for_flux(directory):
         nux = vec[2] + vec[3] + vec[5] + vec[6]
         raw_points.append((vec[1], vec[4], nux))
     return raw_points
+
+def shared_plotting_script(title, labels, ternary_points_events, raw_points_events, time, time_idx, fps):
+    labels = [i.replace("_", "") for i in labels]
+    left, center, right = labels
+    writer = animation.PillowWriter(fps=fps)
+    cmap = lsc("red-constant",cdict, gamma=0)
+    if 'standard' not in sys.argv[1]:
+        scale = 100
+        figure, tax = ternary.figure(scale=scale) 
+        cam = Camera(figure)
+        fontsize = 12
+        tax.set_title(title , fontsize=fontsize)
+        tax.right_axis_label(right, fontsize=fontsize, offset=0.14)
+        tax.bottom_axis_label(center, fontsize=fontsize, offset=0.14)
+        tax.left_axis_label(left , fontsize=fontsize, offset=0.14)
+        tax.clear_matplotlib_ticks()
+        tax.get_axes().axis('off')
+    if 'standard' not in sys.argv[1]:
+        scale = 100
+        figure, tax = ternary.figure(scale=scale) 
+        cam = Camera(figure)
+        fontsize = 12
+        tax.set_title(title , fontsize=fontsize)
+        tax.right_axis_label(center, fontsize=fontsize, offset=0.14)
+        tax.bottom_axis_label(left, fontsize=fontsize, offset=0.14)
+        tax.left_axis_label(right, fontsize=fontsize, offset=0.14)
+        tax.clear_matplotlib_ticks()
+        tax.get_axes().axis('off')
+    rgb_events = [(0, 0, 1)]
+    rgb_flux = [(1, 0, 0,.5)]
+    if sys.argv[1] == 'animation':
+        for (i, point) in enumerate(ternary_points_events):
+            tax.boundary(linewidth=1.5)
+            tax.gridlines(color="black", multiple=20)
+            tax.gridlines(color="blue", multiple=20, linewidth=0.5)
+            tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+            tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
+            tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap)
+            tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
+            cam.snap()
+            print(f"frame number: {i}")
+        ani = cam.animate()
+        ani.save(f"./out/animation/{sys.argv[1]}_{title}.gif", writer=writer)
+    elif sys.argv[1] == 'scatter':
+        tax.boundary(linewidth=1.5)
+        tax.gridlines(color="black", multiple=20)
+        tax.gridlines(color="blue", multiple=20, linewidth=0.5)
+        tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+        tax.scatter(ternary_points_events, c=rgb_events, s=10, marker=".", linewidth=3, label="flux", alpha=.5)
+        plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
+        tax.show()
+    elif 'standard' in sys.argv[1]: 
+        if sys.argv[1] == 'standard-fraction': 
+            data = ternary_points_events
+            plt.ylabel('events')
+        elif sys.argv[1] == 'standard-total': 
+            plt.yscale('log')
+            plt.ylabel('log(events)')
+            data = raw_points_events
+        nux = [i[0] for i in data]
+        nue = [i[1] for i in data]
+        nuebar = [i[2] for i in data]
+        time = [time[i][1] for i in time_idx]
+        plt.xlabel('time')
+        plt.title('events over time')
+        plt.plot(time, nux, label=left)
+        plt.plot(time, nue, label=center)
+        plt.plot(time, nuebar, label=right)
+        plt.legend()
+        plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
+        plt.show()

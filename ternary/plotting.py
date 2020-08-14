@@ -109,7 +109,9 @@ def plot_colored_trajectory(points, cmap=None, ax=None, permutation=None,
         segments.append(cur_line)
     segments = np.array(segments)
 
-    line_segments = matplotlib.collections.LineCollection(segments, cmap=cmap, **kwargs)
+    line_segments = matplotlib.collections.LineCollection(segments,cmap=cmap, **kwargs)
+    # line_segments = matplotlib.collections.LineCollection(segments **kwargs)
+
     line_segments.set_array(np.arange(len(segments)))
     ax.add_collection(line_segments)
 
