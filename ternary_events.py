@@ -42,7 +42,8 @@ def multiple_channels_over_time(smear=True, title=""):
         (time, time_idx) = time_bins(key_dir, .1, 50)
     points = points.tolist()
     (raw_points_events, ternary_points_events) = consolidate_points(points, time_idx)
-    pprint(raw_points_events)
+    uncertainty = calculate_uncertainty(raw_points_events)
+    boundaries = run_boundary_points(ternary_points_events, uncertainty)
     fps = len(ternary_points_events) / time_length
     labels = ('ibd', 'nc', 'nue + ES')
     smeared = "non-smeared"
@@ -51,7 +52,7 @@ def multiple_channels_over_time(smear=True, title=""):
     sub_title = ' '.join([i[0] for i in include_channels])
     sub = f"{title} {sub_title} events {smeared}"
     # plotting time
-    shared_plotting_script(sub, labels, ternary_points_events, raw_points_events, time, time_idx, fps)
+    shared_plotting_script(sub, labels, ternary_points_events, raw_points_events, time, time_idx, fps, boundaries)
 
 def points_over_time(detector, config, smear=True, title=""):
     points_events = total_events_from_flux(detector, config, flux_dir, event_dir, smeared=smear) 

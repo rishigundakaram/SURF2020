@@ -8,6 +8,7 @@ import matplotlib.animation as animation
 import os
 import string
 import matplotlib.pyplot as plt
+from pprint import pprint
 from matplotlib.colors import LinearSegmentedColormap as lsc
 
 
@@ -160,7 +161,7 @@ def get_raw_points_for_flux(directory):
         raw_points.append((vec[1], vec[4], nux))
     return raw_points
 
-def shared_plotting_script(title, labels, ternary_points_events, raw_points_events, time, time_idx, fps):
+def shared_plotting_script(title, labels, ternary_points_events, raw_points_events, time, time_idx, fps, boundary=None):
     labels = [i.replace("_", "") for i in labels]
     left, center, right = labels
     writer = animation.PillowWriter(fps=fps)
@@ -188,18 +189,34 @@ def shared_plotting_script(title, labels, ternary_points_events, raw_points_even
         tax.clear_matplotlib_ticks()
         tax.get_axes().axis('off')
     rgb_events = [(0, 0, 1)]
+    rgb_green = [(0, 1, 0)]
     rgb_flux = [(1, 0, 0,.5)]
     if sys.argv[1] == 'animation':
-        for (i, point) in enumerate(ternary_points_events):
-            tax.boundary(linewidth=1.5)
-            tax.gridlines(color="black", multiple=20)
-            tax.gridlines(color="blue", multiple=20, linewidth=0.5)
-            tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
-            tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-            tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap)
-            tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
-            cam.snap()
-            print(f"frame number: {i}")
+        if not boundary: 
+            for (i, point) in enumerate(ternary_points_events):
+                tax.boundary(linewidth=1.5)
+                tax.gridlines(color="black", multiple=20)
+                tax.gridlines(color="blue", multiple=20, linewidth=0.5)
+                tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+                tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
+                tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap)
+                tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
+                cam.snap()
+                print(f"frame number: {i}")
+        else: 
+            temp = []
+            for i in range(len(time_idx)):
+                temp.extend(boundary[i])
+                tax.boundary(linewidth=1.5)
+                tax.gridlines(color="black", multiple=20)
+                tax.gridlines(color="blue", multiple=20, linewidth=0.5)
+                tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+                tax.scatter(temp, c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
+                tax.scatter(ternary_points_events[0:i+1], c=rgb_green[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
+                tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap)
+                tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
+                cam.snap()
+                print(f"frame number: {i}")
         ani = cam.animate()
         ani.save(f"./out/animation/{sys.argv[1]}_{title}.gif", writer=writer)
     elif sys.argv[1] == 'scatter':
@@ -230,3 +247,44 @@ def shared_plotting_script(title, labels, ternary_points_events, raw_points_even
         plt.legend()
         plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
         plt.show()
+
+def calculate_uncertainty(raw_points): 
+    x = lambda num, tot : math.sqrt(num * (tot - num) / math.pow(tot, 3))
+    y = [[100 * x(j, sum(i)) for j in i] for i in raw_points]
+    pprint(y)
+    return y 
+
+def within(x, p, e):
+    if x >= p - e and x <= p + e: 
+        return True 
+    return False 
+
+def boundary_points(points, uncertainty): 
+    check = []
+    sub = [[x + uncertainty[i], x - uncertainty[i]] for (i, x) in enumerate(points)]
+    pprint(sub)
+    check.append((sub[0][0], sub[1][0], 100 - sub[0][0] - sub[1][0]))
+    check.append((sub[0][0], sub[1][1], 100 - sub[0][0] - sub[1][1]))
+    check.append((sub[0][1], sub[1][0], 100 - sub[0][1] - sub[1][0]))
+    check.append((sub[0][1], sub[1][1], 100 - sub[0][1] - sub[1][1]))
+    check.append((100 - sub[1][0] - sub[2][0], sub[1][0], sub[2][0]))
+    check.append((100 - sub[1][0] - sub[2][1], sub[1][0], sub[2][1]))
+    check.append((100 - sub[1][1] - sub[2][0], sub[1][1], sub[2][0]))
+    check.append((100 - sub[1][1] - sub[2][1], sub[1][1], sub[2][1]))
+    check.append((sub[0][0], 100 - sub[0][0] - sub[2][0], sub[2][0]))
+    check.append((sub[0][0], 100 - sub[0][0] - sub[2][1], sub[2][1]))
+    check.append((sub[0][1], 100 - sub[0][1] - sub[2][0], sub[2][0]))
+    check.append((sub[0][1], 100 - sub[0][1] - sub[2][1], sub[2][1]))
+    print(check)
+    check = [i for i in check if within(i[0] + i[1] + i[2], 100, .5)]
+    check = [i for i in check if within(i[0], points[0], uncertainty[0])]
+    check = [i for i in check if within(i[1], points[1], uncertainty[1])]
+    check = [i for i in check if within(i[2], points[2], uncertainty[2])]
+    return check 
+
+def run_boundary_points(raw_points, uncertainty): 
+    ret = []
+    for i in range(len(raw_points)): 
+        ret.append(boundary_points(raw_points[i], uncertainty[i]))
+    return ret
+
