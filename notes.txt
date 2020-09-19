@@ -1,0 +1,4 @@
+TODO
+-- validate that everything is working fine
+flux over time works 
+need to figure out different mass orderings

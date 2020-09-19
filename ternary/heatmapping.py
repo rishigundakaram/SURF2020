@@ -185,7 +185,7 @@ def polygon_generator(data, scale, style, permutation=None):
 
 def heatmap(data, scale, vmin=None, vmax=None, cmap=None, ax=None,
             scientific=False, style='triangular', colorbar=True,
-            permutation=None, use_rgba=False, cbarlabel=None, cb_kwargs=None):
+            permutation=None, use_rgba=False, cbarlabel=None, cb_kwargs=None, zorder=1):
     """
     Plots heatmap of given color values.
 
@@ -254,7 +254,7 @@ def heatmap(data, scale, vmin=None, vmax=None, cmap=None, ax=None,
             color = value  # rgba tuple (r,g,b,a) all in [0,1]
         # Matplotlib wants a list of xs and a list of ys
         xs, ys = unzip(vertices)
-        ax.fill(xs, ys, facecolor=color, edgecolor=color)
+        ax.fill(xs, ys, facecolor=color, edgecolor=color, zorder=zorder)
 
     if not cb_kwargs:
         cb_kwargs = dict()
