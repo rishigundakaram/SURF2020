@@ -454,3 +454,10 @@ class TernaryAxesSubplot(object):
                              colorbar=colorbar, permutation=permutation,
                              vmin=vmin, vmax=vmax, cbarlabel=cbarlabel,
                              cb_kwargs=cb_kwargs)
+    
+    
+    def plot_polygons(self, points, **kwargs):
+        ax = self.get_axes()
+        permutation = self._permutation
+        plotting.plot_polygons(points, ax=ax,
+                                         permutation=permutation, **kwargs)

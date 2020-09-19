@@ -1,5 +1,8 @@
 import math
+import matplotlib
 import sys
+if "animation" in sys.argv[1]:
+    matplotlib.use("Agg")
 from ternary import plotting
 from ternary import ternary_axes_subplot as ternary
 from celluloid import Camera
@@ -10,60 +13,21 @@ import string
 import matplotlib.pyplot as plt
 from pprint import pprint
 from matplotlib.colors import LinearSegmentedColormap as lsc
-
+from ternary.helpers import simplex_iterator
+import numpy as np
 
 flavors = ['nue', 'nuebar', 'numu', 'numubar', 'nutau', 'nutaubar']
-interactions = {
-    "argon" : ["nue_Ar40", "_e", "nc"], 
-    "water" : ["ibd", ["_e", "nue_O16"], "nc"], 
-    "scint" : ["ibd", ["_e_", "nue_C12"], "nc"]
-}
+
 cdict= {
     'red': ((0.0, 0.0, 1.0), (1.0, 1.0, 0.0)),
     'green': ((0.0,0.0,0.0), (1.0,0.0,0.0)),
     'blue':((0.0,0.0,0.0), (1.0,0.0,0.0)),
     'alpha': ((0.0,0.0,.75), (1.0, .75, 0.0))
 }
-cmap = lsc("red-constant",cdict)
-def total_events_from_flux(detector, config, flux_dir, out_dir, smeared=True): 
-    fluxes = os.listdir(flux_dir)
-    fluxes = natsorted(fluxes)
-    channels = load_detector(detector)
-    chan = []
-    for inter in interactions[detector]: 
-        if type(inter) == list: 
-            lst = []
-            for cur in inter: 
-                check = [i for i in channels if cur in i]
-                if inter != 'nc': 
-                    check = [i for i in check if 'nc' not in i]
-                lst.extend(check)
-            chan.append(lst)
-        else: 
-            check = [i for i in channels if inter in i]
-            if inter != 'nc': 
-                check = [i for i in check if 'nc' not in i]
-            chan.append(check)
-    total_events = []
-    for flux in fluxes: 
-        flux = flux.replace(".dat", "")
-        sub_total_events = [0 , 0, 0] 
-        for (i, c) in enumerate(chan): 
-            subtotal = 0
-            for cur in c: 
-                filename = f"{out_dir}{flux}_{cur}_{config}_events"
-                if smeared: 
-                    filename += "_smeared"
-                filename += ".dat"
-                with open(filename) as f: 
-                    for line in f: 
-                        data = line.split()
-                    subtotal += float(data[1])
-            sub_total_events[i] = subtotal
-        total_events.append(sub_total_events)
-    return total_events
+cmap_red = lsc("red-constant",cdict)
 
-def get_labels(detector): 
+
+def get_labels(detector, interactions): 
     out = interactions[detector]
     labels = [0, 0, 0]
     for (i, label) in enumerate(out): 
@@ -79,7 +43,7 @@ def get_labels(detector):
     return labels
 
 
-def time_bins(filename, log_scale, num_bins): 
+def generate_time_bins(filename, log_scale, num_bins): 
     with open(filename) as f: 
         time = []
         for line in f: 
@@ -132,36 +96,18 @@ def consolidate_points(points, time_idx):
         time_idx.remove(i)
     return (raw_points, ternary_points)
 
-def load_detector(channel): 
-    conf = []
-    with open(f"../channels/channels_{channel}.dat") as f: 
-        for line in f: 
-            line = line.split(" ")
-            conf.append(line[0])
-    return conf
-    
-def get_raw_points_for_flux(directory): 
-    raw_points = []
-    direc = os.listdir(directory)
-    direc = natsorted(direc)
-    for fil in enumerate(direc):
-        with open(directory + fil[1]) as f:
-            data = []
-            for line in f:
-                line = line.rstrip("\n")
-                words = line.split()
-                try: 
-                    words = [float(word) for word in words]
-                except: 
-                    continue
-                if words[0] != 0 :
-                    data.append(words)
-        vec = [sum(i) for i in zip(*data)]
-        nux = vec[2] + vec[3] + vec[5] + vec[6]
-        raw_points.append((vec[1], vec[4], nux))
-    return raw_points
 
-def shared_plotting_script(title, labels, ternary_points_events, raw_points_events, time, time_idx, fps, boundary=None):
+    
+def generate_title(typee="", sub=""):
+    sp1 =  ""
+    if typee != "": 
+        sp1 = " "
+    sp2 = ""
+    if sub != "": 
+        sp2 = " "
+    return f"{typee}{sp1}{sub}{sp2}{sys.argv[1]}"
+
+def shared_plotting_script(title, labels, ternary_points_events, raw_points_events, time, time_idx, fps, heatmap_data=None):
     labels = [i.replace("_", "") for i in labels]
     left, center, right = labels
     writer = animation.PillowWriter(fps=fps)
@@ -177,55 +123,30 @@ def shared_plotting_script(title, labels, ternary_points_events, raw_points_even
         tax.left_axis_label(left , fontsize=fontsize, offset=0.14)
         tax.clear_matplotlib_ticks()
         tax.get_axes().axis('off')
-    if 'standard' not in sys.argv[1]:
-        scale = 100
-        figure, tax = ternary.figure(scale=scale) 
-        cam = Camera(figure)
-        fontsize = 12
-        tax.set_title(title , fontsize=fontsize)
-        tax.right_axis_label(center, fontsize=fontsize, offset=0.14)
-        tax.bottom_axis_label(left, fontsize=fontsize, offset=0.14)
-        tax.left_axis_label(right, fontsize=fontsize, offset=0.14)
-        tax.clear_matplotlib_ticks()
-        tax.get_axes().axis('off')
-    rgb_events = [(0, 0, 1)]
-    rgb_green = [(0, 1, 0)]
+    rgb_events = [(0, 1, 0)]
+    rgb_green = [(0,1,0)]
     rgb_flux = [(1, 0, 0,.5)]
     if sys.argv[1] == 'animation':
-        if not boundary: 
-            for (i, point) in enumerate(ternary_points_events):
-                tax.boundary(linewidth=1.5)
-                tax.gridlines(color="black", multiple=20)
-                tax.gridlines(color="blue", multiple=20, linewidth=0.5)
-                tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
-                tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-                tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap)
-                tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
-                cam.snap()
-                print(f"frame number: {i}")
-        else: 
-            temp = []
-            for i in range(len(time_idx)):
-                temp.extend(boundary[i])
-                tax.boundary(linewidth=1.5)
-                tax.gridlines(color="black", multiple=20)
-                tax.gridlines(color="blue", multiple=20, linewidth=0.5)
-                tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
-                tax.scatter(temp, c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-                tax.scatter(ternary_points_events[0:i+1], c=rgb_green[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-                tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap)
-                tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
-                cam.snap()
-                print(f"frame number: {i}")
+        for (i, point) in enumerate(ternary_points_events):
+            tax.boundary(linewidth=1.5)
+            tax.gridlines(color="black", multiple=20)
+            tax.gridlines(color="blue", multiple=20, linewidth=0.5)
+            tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+            tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5, zorder=4)
+            tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap, zorder=3)
+            tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
+            cam.snap()
+            print(f"frame number: {i}")
         ani = cam.animate()
-        ani.save(f"./out/animation/{sys.argv[1]}_{title}.gif", writer=writer)
+        ani.save(f"./out/animation/{title}.gif", writer=writer)
     elif sys.argv[1] == 'scatter':
         tax.boundary(linewidth=1.5)
         tax.gridlines(color="black", multiple=20)
         tax.gridlines(color="blue", multiple=20, linewidth=0.5)
         tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
         tax.scatter(ternary_points_events, c=rgb_events, s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-        plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
+        plt.savefig(f"./out/plots/{title}.png", writer=writer)
+        tax._redraw_labels()
         tax.show()
     elif 'standard' in sys.argv[1]: 
         if sys.argv[1] == 'standard-fraction': 
@@ -245,46 +166,100 @@ def shared_plotting_script(title, labels, ternary_points_events, raw_points_even
         plt.plot(time, nue, label=center)
         plt.plot(time, nuebar, label=right)
         plt.legend()
-        plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
+        plt.savefig(f"./out/plots/{title}.png", writer=writer)
+        plt.show()
+    elif 'heatmap' in sys.argv[1]: 
+        if "animation" in sys.argv[1]: 
+            red = [(1,0,0)]
+            green = [(0,1,0)]
+            for i in range(len(ternary_points_events[0])): 
+                tax.boundary(linewidth=1.5)
+                tax.gridlines(color="black", multiple=20)
+                tax.gridlines(color="blue", multiple=20, linewidth=0.5)
+                tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+                heatmap_data_ih = generate_heatmap_dict(raw_points_events[0][0:i+1], ternary_points_events[0][0:i+1], 1)
+                heatmap_data_nh = generate_heatmap_dict(raw_points_events[1][0:i+1], ternary_points_events[1][0:i+1], .5)
+                heatmap_data = consolidate_heatmap_data(heatmap_data_nh, heatmap_data_ih)
+                tax.heatmap(heatmap_data, style='hexagonal', colorbar=False)
+                tax.scatter(ternary_points_events[0][0:i+1], c=red, s=10, marker=".", linewidth=3, label="flux", alpha=.5, zorder=5)
+                tax.scatter(ternary_points_events[1][0:i+1], c=green, s=10, marker=".", linewidth=3, label="flux", alpha=.5, zorder=5)
+                # tax.plot_colored_trajectory(ternary_points_events[0][0:i+1], linewidths=1, cmap=cmap, zorder=4)
+                tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
+                cam.snap()
+                print(f"frame number: {i}")
+            ani = cam.animate()
+            ani.save(f"./out/animation/{title}.gif", writer=writer)
+        elif "scatter" in sys.argv[1]:
+            tax.boundary(linewidth=1.5)
+            tax.gridlines(color="black", multiple=20)
+            tax.gridlines(color="blue", multiple=20, linewidth=0.5)
+            tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
+            tax.heatmap(heatmap_data, style='hexagonal', colorbar=True)
+            for ternary_points in ternary_points_events: 
+                tax.scatter(ternary_points, c=rgb_events, s=10, marker=".", linewidth=3, label="flux", alpha=.5, zorder=5)
+                rgb_events = [(1, 0, 0)]
+            plt.savefig(f"./out/plots/{title}.png", writer=writer)
         plt.show()
 
-def calculate_uncertainty(raw_points): 
-    x = lambda num, tot : math.sqrt(num * (tot - num) / math.pow(tot, 3))
-    y = [[100 * x(j, sum(i)) for j in i] for i in raw_points]
-    pprint(y)
-    return y 
+def error_function(check_point, measured_point): 
+    """
+    Parameters: 
+    check_point: 3-tuple of index of point which is being considered. i + j + k = 100
+    measured point: 3-tuple of number of events in each channel 
+    Returns: 
+    prob(check_point[0] / 100, check_point[1] / 100)
+    """
+    A = measured_point[0]
+    B = measured_point[1]
+    fA = check_point[0] / sum(check_point)
+    fB = check_point[1] / sum(check_point)
+    mfA = measured_point[0] / sum(measured_point) 
+    mfB = measured_point[1] / sum(measured_point)
+    sigfA = math.sqrt(mfA * (1 - mfA) / sum(measured_point))
+    sigfB = math.sqrt(mfB * (1 - mfB) / sum(measured_point))
+    sigAB = -1 * A  * B / math.pow(sum(measured_point), 3)
+    rho = sigAB / (sigfA * sigfB)
+    p1 = 1 / (2 * math.pi * sigfA * sigfB * math.sqrt(1 - rho * rho))
+    p3 = (fA - mfA) * (fA - mfA) / (sigfA * sigfA) + (fB - mfB) * (fB - mfB) / (sigfB * sigfB) - 2 * rho * (fA - mfA) * (fB - mfB) / (sigfA * sigfB)
 
-def within(x, p, e):
-    if x >= p - e and x <= p + e: 
-        return True 
-    return False 
+    p2 = math.exp(-.5 / (1 - rho * rho) * p3)
+    prob = p1 * p2 
+    return prob
 
-def boundary_points(points, uncertainty): 
-    check = []
-    sub = [[x + uncertainty[i], x - uncertainty[i]] for (i, x) in enumerate(points)]
-    pprint(sub)
-    check.append((sub[0][0], sub[1][0], 100 - sub[0][0] - sub[1][0]))
-    check.append((sub[0][0], sub[1][1], 100 - sub[0][0] - sub[1][1]))
-    check.append((sub[0][1], sub[1][0], 100 - sub[0][1] - sub[1][0]))
-    check.append((sub[0][1], sub[1][1], 100 - sub[0][1] - sub[1][1]))
-    check.append((100 - sub[1][0] - sub[2][0], sub[1][0], sub[2][0]))
-    check.append((100 - sub[1][0] - sub[2][1], sub[1][0], sub[2][1]))
-    check.append((100 - sub[1][1] - sub[2][0], sub[1][1], sub[2][0]))
-    check.append((100 - sub[1][1] - sub[2][1], sub[1][1], sub[2][1]))
-    check.append((sub[0][0], 100 - sub[0][0] - sub[2][0], sub[2][0]))
-    check.append((sub[0][0], 100 - sub[0][0] - sub[2][1], sub[2][1]))
-    check.append((sub[0][1], 100 - sub[0][1] - sub[2][0], sub[2][0]))
-    check.append((sub[0][1], 100 - sub[0][1] - sub[2][1], sub[2][1]))
-    print(check)
-    check = [i for i in check if within(i[0] + i[1] + i[2], 100, .5)]
-    check = [i for i in check if within(i[0], points[0], uncertainty[0])]
-    check = [i for i in check if within(i[1], points[1], uncertainty[1])]
-    check = [i for i in check if within(i[2], points[2], uncertainty[2])]
-    return check 
+def heatmap_shader(check_point, measured_point, shader): 
+    """
+    takes in the current point to check and the mean point. returns 1 if error functions is larger for 
+    current point than measured point. returns 0 otherwise. 
+    """
+    p1 = error_function(check_point, measured_point)
+    p2 = error_function(measured_point, measured_point) / math.pi
+    if p1 > p2: return shader
+    return 0
 
-def run_boundary_points(raw_points, uncertainty): 
-    ret = []
-    for i in range(len(raw_points)): 
-        ret.append(boundary_points(raw_points[i], uncertainty[i]))
+
+def get_closest_point(check_point, ternary_points, raw_points): 
+    norm = [np.linalg.norm([a - b for a, b, in zip(check_point, i)]) for i in ternary_points]
+    return raw_points[norm.index(min(norm))]
+
+def generate_heatmap_dict(raw_points, ternary_points, shader=1, scale=100): 
+    d = dict()
+    for (i, j, k) in simplex_iterator(scale):
+        mean = get_closest_point((i, j, k), ternary_points, raw_points)
+        d[(i, j, k)] = heatmap_shader((i,j,k), mean, shader)
+    return d
+
+def consolidate_heatmap_data(h1, h2): 
+    ret = dict()
+    for key in h1.keys(): 
+        v1 = h1[key]
+        v2 = h2[key]
+        if v1 == 0 and v2 == 0: 
+            cur = 0
+        elif v1 == 0: 
+            cur = v2 
+        elif v2 == 0: 
+            cur = v1
+        else: 
+            cur = (v1 + v2) / 2
+        ret[key] = cur
     return ret
-

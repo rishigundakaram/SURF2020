@@ -4,6 +4,8 @@ Plotting functions: scatter, plot (curves), axis labelling.
 
 import matplotlib
 from matplotlib import pyplot
+from matplotlib.patches import Polygon
+
 import numpy as np
 
 from .helpers import project_sequence
@@ -148,6 +150,52 @@ def scatter(points, ax=None, permutation=None, colorbar=False, colormap=None,
         fig, ax = pyplot.subplots()
     xs, ys = project_sequence(points, permutation=permutation)
     ax.scatter(xs, ys, vmin=vmin, vmax=vmax, **kwargs)
+
+    if colorbar and (colormap != None):
+        if cb_kwargs != None:
+            colorbar_hack(ax, vmin, vmax, colormap, scientific=scientific,
+                          cbarlabel=cbarlabel, **cb_kwargs)
+        else:
+            colorbar_hack(ax, vmin, vmax, colormap, scientific=scientific,
+                          cbarlabel=cbarlabel)
+
+    return ax
+
+def plot_polygons(points, ax=None, permutation=None, colorbar=False, colormap=None,
+            vmin=0, vmax=1, scientific=False, cbarlabel=None, cb_kwargs=None,
+            **kwargs):
+    """
+    Plots trajectory points where each point satisfies x + y + z = scale.
+    First argument is a list or numpy array of tuples of length 3.
+
+    Parameters
+    ----------
+    points: List of 3-tuples
+        The list of tuples to be scatter-plotted.
+    ax: Matplotlib AxesSubplot, None
+        The subplot to draw on.        if len(point):
+
+    colorbar: bool, False
+        Show colorbar.
+    colormap: String or matplotlib.colors.Colormap, None
+        The name of the Matplotlib colormap to use.
+    vmin: int, 0
+        Minimum value for colorbar.
+    vmax: int, 1
+        Maximum value for colorbar.
+    cb_kwargs: dict
+        Any additional kwargs to pass to colorbar
+    kwargs:
+        Any kwargs to pass through to matplotlib.
+    """
+    if not ax:
+        fig, ax = pyplot.subplots()
+    for point in points: 
+        xs, ys = project_sequence(point, permutation=permutation)
+        ax.fill(xs, ys, **kwargs)
+        # xy = np.array(list(zip(xs, ys)))
+        # patch = Polygon(xy, **kwargs)
+        # ax.add_patch(patch)
 
     if colorbar and (colormap != None):
         if cb_kwargs != None:
