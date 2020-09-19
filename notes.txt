@@ -1,3 +1,0 @@
-TODO
---validated that files are being read correctly
--- left axis is a, bottom is b, right is c 

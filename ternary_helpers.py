@@ -25,6 +25,7 @@ cdict= {
     'alpha': ((0.0,0.0,.75), (1.0, .75, 0.0))
 }
 cmap = lsc("red-constant",cdict)
+
 def total_events_from_flux(detector, config, flux_dir, out_dir, smeared=True): 
     fluxes = os.listdir(flux_dir)
     fluxes = natsorted(fluxes)
@@ -78,7 +79,6 @@ def get_labels(detector):
         separator = ""
     return labels
 
-
 def time_bins(filename, log_scale, num_bins): 
     with open(filename) as f: 
         time = []
@@ -122,7 +122,9 @@ def consolidate_points(points, time_idx):
         nuebar = sum([j[1] for j in cur])
         nux = sum([j[2] for j in cur])
         total = nue + nuebar + nux
-        concentrations = (nue / total * 100, nuebar / total * 100, nux / total * 100)
+        concentrations = []
+        if total != 0: 
+            concentrations = (nue / total * 100, nuebar / total * 100, nux / total * 100)
         if 0 not in concentrations: 
             ternary_points.append(concentrations)
             raw_points.append((nue, nuebar, nux))
@@ -161,7 +163,7 @@ def get_raw_points_for_flux(directory):
         raw_points.append((vec[1], vec[4], nux))
     return raw_points
 
-def shared_plotting_script(title, labels, ternary_points_events, raw_points_events, time, time_idx, fps, boundary=None):
+def shared_plotting_script(title, labels, ternary_points_events, raw_points_events, time, time_idx, fps, boundary=None, out_dir=None, type=None):
     labels = [i.replace("_", "") for i in labels]
     left, center, right = labels
     writer = animation.PillowWriter(fps=fps)
@@ -177,29 +179,20 @@ def shared_plotting_script(title, labels, ternary_points_events, raw_points_even
         tax.left_axis_label(left , fontsize=fontsize, offset=0.14)
         tax.clear_matplotlib_ticks()
         tax.get_axes().axis('off')
-    if 'standard' not in sys.argv[1]:
-        scale = 100
-        figure, tax = ternary.figure(scale=scale) 
-        cam = Camera(figure)
-        fontsize = 12
-        tax.set_title(title , fontsize=fontsize)
-        tax.right_axis_label(center, fontsize=fontsize, offset=0.14)
-        tax.bottom_axis_label(left, fontsize=fontsize, offset=0.14)
-        tax.left_axis_label(right, fontsize=fontsize, offset=0.14)
-        tax.clear_matplotlib_ticks()
-        tax.get_axes().axis('off')
     rgb_events = [(0, 0, 1)]
     rgb_green = [(0, 1, 0)]
     rgb_flux = [(1, 0, 0,.5)]
+    rgb_list = [[(0, 1, 0)], [(0, 0, 1)], [(1, 0, 0)]]
     if sys.argv[1] == 'animation':
         if not boundary: 
-            for (i, point) in enumerate(ternary_points_events):
+            for i in range(len(ternary_points_events[0])):
                 tax.boundary(linewidth=1.5)
                 tax.gridlines(color="black", multiple=20)
                 tax.gridlines(color="blue", multiple=20, linewidth=0.5)
                 tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
-                tax.scatter(ternary_points_events[0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-                tax.plot_colored_trajectory(ternary_points_events[0:i+1], linewidths=1, cmap=cmap)
+                for j in range(len(ternary_points_events)):
+                    tax.scatter(ternary_points_events[j][0:i+1], c=rgb_events[0:i+1], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
+                    tax.plot_colored_trajectory(ternary_points_events[j][0:i+1], linewidths=1, cmap=cmap)
                 tax.annotate(text=f"{time[time_idx[i]][1]}s", position=(.15,.85), xytext=(-20, -20))
                 cam.snap()
                 print(f"frame number: {i}")
@@ -218,14 +211,23 @@ def shared_plotting_script(title, labels, ternary_points_events, raw_points_even
                 cam.snap()
                 print(f"frame number: {i}")
         ani = cam.animate()
-        ani.save(f"./out/animation/{sys.argv[1]}_{title}.gif", writer=writer)
+        if not out_dir: 
+            ani.save(f"./out/animation/{sys.argv[1]}_{title}.gif", writer=writer)
+        else: 
+            ani.save(f"{out_dir}{sys.argv[1]}_{title}.gif")
     elif sys.argv[1] == 'scatter':
         tax.boundary(linewidth=1.5)
         tax.gridlines(color="black", multiple=20)
         tax.gridlines(color="blue", multiple=20, linewidth=0.5)
         tax.ticks(axis='lbr', linewidth=1, multiple=20, offset=.02)
-        tax.scatter(ternary_points_events, c=rgb_events, s=10, marker=".", linewidth=3, label="flux", alpha=.5)
-        plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
+        for i, events in enumerate(ternary_points_events): 
+            tax.scatter(events, color=rgb_events[i], s=10, marker=".", linewidth=3, label="flux", alpha=.5)
+        if not out_dir:
+            print('here')
+            plt.savefig(f"./out/plots/{sys.argv[1]}_{title}.png", writer=writer)
+        else: 
+            print(f"{out_dir}{sys.argv}")
+            plt.savefig(f"{out_dir}{sys.argv[1]}_{title}.png")
         tax.show()
     elif 'standard' in sys.argv[1]: 
         if sys.argv[1] == 'standard-fraction': 

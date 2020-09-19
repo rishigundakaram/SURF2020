@@ -59,9 +59,7 @@ void make_2d_fluxes(TString indirname, TString outdirname, TString fluxname, Int
     std::ifstream in;
 
     TString infilename = indirname+fluxname+"/timedata/neutrino_signal_"+flavname2[i];
-
     cout << "Reading "<< infilename<<endl;
-
     in.open(infilename);
     j=0;
     Int_t numpoints;
@@ -118,9 +116,9 @@ void make_2d_fluxes(TString indirname, TString outdirname, TString fluxname, Int
   Double_t t_start = time[0];
 
   //  Double_t t_end = 8.35+t_offset;
-  t_end = time[j-1];
+  Double_t t_end = time[j-1];
   //  Double_t t_step = TMath::Log10(t_end/t_start)/double(ntimebins);
-  t_step = 0.0001;
+  Double_t t_step = 0.0001;
 
   //    cout << "t_step "<<t_step<<endl;
 
@@ -318,7 +316,7 @@ void make_2d_fluxes(TString indirname, TString outdirname, TString fluxname, Int
   // Now make the 2D histos
 
   t_step = 0.001;
-  ntimebins = TMath::Nint((t_end-t_start)/t_step)+1;
+  Int_t ntimebins = TMath::Nint((t_end-t_start)/t_step)+1;
   cout << "ntimebins "<<ntimebins<<endl;
 
   Double_t firsten = 0.;

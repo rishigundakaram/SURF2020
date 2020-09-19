@@ -1,4 +1,4 @@
-#!/opt/local/bin/perl
+#!/usr/bin/perl
 
 #@fluxfiles = `find /Users/katescholberg/Documents/snreview/cimreview/huedepohl -name "s*" `;
 
@@ -11,7 +11,7 @@ while(<INFILES>) {
   $fluxfile = $_;
   print $fluxfile,"\n";
 
- $command =  "root -b -q \'make_2d_fluxes.C(\"/Users/katescholberg/Documents/snreview/cimreview/huedepohl/\",\"Huedepohl/\",\"".$fluxfile."\"".",0)\'";
+ $command =  "root -b -q \'make_2d_fluxes.C(\"/Users/rishigundakaram/projects/SURF2020/snowglobes/ternary_plot/fluxdb/\",\"Huedepohl\",\"".$fluxfile."\"".",0)\'";
 
   print $command,"\n";
 
